@@ -17,11 +17,12 @@ func validateRequired(input string) func(string) error {
 	}
 }
 
-type PromptResult struct {
-	Repo        string
-	RegistryURL string
-	Region      string
-	Arch        string
+type PromptResults struct {
+	Repo           string
+	RegistryURL    string
+	Region         string
+	Arch           string
+	DockerfilePath string
 }
 
 func detectArch() string {
@@ -34,16 +35,19 @@ func detectArch() string {
 	return "amd64"
 }
 
-func AskInputs() PromptResult {
-	var repo string
-	var registry string
-	var region string
-	var arch string = detectArch()
+func AskInputs() PromptResults {
+	var (
+		repo           string
+		registry       string
+		region         string
+		arch           string = detectArch()
+		dockerfilePath string = "Dockerfile"
+	)
 
 	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().
-				Title("Enter the repository to clone (Make sure it has a Dockerfile on the root)").
+				Title("Enter the repository to clone").
 				Value(&repo).
 				Placeholder("https://github.com/username/repo").
 				Validate(validateRequired("git repository")),
@@ -67,6 +71,12 @@ func AskInputs() PromptResult {
 					huh.NewOption("arm64", "arm64"),
 				).
 				Value(&arch),
+
+			huh.NewInput().
+				Title("Enter the Dockerfile path in the repository").
+				Placeholder("Dockerfile").
+				Value(&dockerfilePath).
+				Validate(validateRequired("Dockerfile path")),
 		),
 	)
 
@@ -75,10 +85,11 @@ func AskInputs() PromptResult {
 		log.Fatal(err)
 	}
 
-	return PromptResult{
-		Repo:        repo,
-		RegistryURL: registry,
-		Region:      region,
-		Arch:        arch,
+	return PromptResults{
+		Repo:           repo,
+		RegistryURL:    registry,
+		Region:         region,
+		Arch:           arch,
+		DockerfilePath: dockerfilePath,
 	}
 }

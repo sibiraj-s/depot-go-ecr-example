@@ -43,7 +43,7 @@ func (as *buildkitAuthServer) VerifyTokenAuthority(ctx context.Context, req *aut
 	return nil, status.Errorf(codes.Unavailable, "client side tokens disabled")
 }
 
-func registryAuth(ecrRegistry *aws.ECRRegistry, username, password string) registry.AuthConfig {
+func registryAuthConfig(ecrRegistry *aws.ECRRegistry, username, password string) registry.AuthConfig {
 	return registry.AuthConfig{
 		Username:      username,
 		Password:      password,
@@ -52,9 +52,9 @@ func registryAuth(ecrRegistry *aws.ECRRegistry, username, password string) regis
 }
 
 func authConfigs(ecrRegistry *aws.ECRRegistry, username, password string) map[string]registry.AuthConfig {
-	authConfigs := map[string]registry.AuthConfig{}
-	authConfigs[ecrRegistry.Host] = registryAuth(ecrRegistry, username, password)
-	return authConfigs
+	return map[string]registry.AuthConfig{
+		ecrRegistry.Host: registryAuthConfig(ecrRegistry, username, password),
+	}
 }
 
 func (as *buildkitAuthServer) Credentials(ctx context.Context, req *auth.CredentialsRequest) (*auth.CredentialsResponse, error) {

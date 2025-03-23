@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/depot/depot-go/build"
@@ -27,6 +26,7 @@ type BuildOptions struct {
 	Tag            string
 	DockerfilePath string
 	Arch           string
+	RepoDirPath    string
 }
 
 type Annotations struct {
@@ -39,8 +39,6 @@ type Descriptor struct {
 	Size        int64       `json:"size,omitempty"`
 	Annotations Annotations `json:"annotations,omitempty"`
 }
-
-var dockerFileName = "Dockerfile"
 
 func newLine() {
 	fmt.Println("")
@@ -77,8 +75,7 @@ func main() {
 	newLine()
 
 	// 2. Check if dockerfile exists
-	dockerFilePath := JoinPath(cloneDir, dockerFileName)
-	if !FileExists(dockerFilePath) {
+	if !FileExists(JoinPath(cloneDir, inputs.DockerfilePath)) {
 		fmt.Println("Dockerfile not found in", cloneDir)
 		return
 	}
@@ -88,7 +85,8 @@ func main() {
 
 	// this will be dynamically generated for each job/deployment.
 	opts := BuildOptions{
-		DockerfilePath: dockerFilePath,
+		RepoDirPath:    cloneDir,
+		DockerfilePath: inputs.DockerfilePath,
 		Registry:       registry,
 		Region:         inputs.Region,
 		Tag:            aws.ImageTag(registry, workflowId),
@@ -110,7 +108,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	fmt.Println("Waiting for an instance to pickup the build...")
+	fmt.Println("Waiting for a depot machine to pickup the build...")
 
 	// Set the buildErr to any error that represents the build failing.
 	var buildErr error
@@ -159,18 +157,17 @@ func buildImage(ctx context.Context, buildkitClient *client.Client, opts BuildOp
 	}
 
 	ecrCreds := aws.GetEcrCreds(ctx, opts.Region, opts.Registry)
-	repoDir := filepath.Dir(opts.DockerfilePath)
 
 	eg.Go(func() error {
 		opts := client.SolveOpt{
 			Frontend: "dockerfile.v0",
 			FrontendAttrs: map[string]string{
-				"filename": dockerFileName,
+				"filename": opts.DockerfilePath,
 				"platform": fmt.Sprintf("linux/%s", opts.Arch),
 			},
 			LocalDirs: map[string]string{
-				"dockerfile": repoDir,
-				"context":    repoDir,
+				"dockerfile": opts.RepoDirPath,
+				"context":    opts.RepoDirPath,
 			},
 			Exports:  []client.ExportEntry{exportEntry},
 			Session:  []session.Attachable{NewBuildkitAuthProvider(ecrCreds, opts.Registry)},
@@ -210,7 +207,7 @@ func buildImage(ctx context.Context, buildkitClient *client.Client, opts BuildOp
 	}
 
 	fmt.Println("Removing clone directory...")
-	RemoveDir(repoDir)
+	RemoveDir(opts.RepoDirPath)
 	fmt.Println("Clone directory removed.")
 
 	newLine()

@@ -19,6 +19,8 @@ type buildkitAuthServer struct {
 	password    string
 }
 
+type authConfigMap = map[string]registry.AuthConfig
+
 func NewBuildkitAuthProvider(creds aws.EcrCreds, ecrRegistry *aws.ECRRegistry) session.Attachable {
 	return &buildkitAuthServer{
 		ecrRegistry: ecrRegistry,
@@ -51,8 +53,8 @@ func registryAuthConfig(ecrRegistry *aws.ECRRegistry, username, password string)
 	}
 }
 
-func authConfigs(ecrRegistry *aws.ECRRegistry, username, password string) map[string]registry.AuthConfig {
-	return map[string]registry.AuthConfig{
+func authConfigs(ecrRegistry *aws.ECRRegistry, username, password string) authConfigMap {
+	return authConfigMap{
 		ecrRegistry.Host: registryAuthConfig(ecrRegistry, username, password),
 	}
 }

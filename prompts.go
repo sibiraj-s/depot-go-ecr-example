@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"runtime"
+	"strings"
 
 	"github.com/charmbracelet/huh"
 )
@@ -17,12 +18,31 @@ func validateRequired(input string) func(string) error {
 	}
 }
 
+func validateProtocol(input string, protocols []string, optional bool) func(string) error {
+	return func(value string) error {
+		if value == "" && optional {
+			return nil
+		}
+
+		// if value is not empty, check if it starts with any of the given protocols
+		// regardless of optional
+		// supports only the given protocols
+		for _, protocol := range protocols {
+			if strings.HasPrefix(value, protocol) {
+				return nil
+			}
+		}
+		return fmt.Errorf("unsupported %s: %s. Only %s are supported", input, value, strings.Join(protocols, ", "))
+	}
+}
+
 type PromptResults struct {
-	Repo           string
-	RegistryURL    string
-	Region         string
-	Arch           string
-	DockerfilePath string
+	Repo                 string
+	RegistryURL          string
+	Region               string
+	Arch                 string
+	DockerfilePath       string
+	RemoteBuilderAddress string
 }
 
 func detectArch() string {
@@ -37,11 +57,12 @@ func detectArch() string {
 
 func AskInputs() PromptResults {
 	var (
-		repo           string
-		registry       string
-		region         string
-		arch           string = detectArch()
-		dockerfilePath string = "Dockerfile"
+		repo              string
+		registry          string
+		region            string
+		arch              string = detectArch()
+		dockerfilePath    string = "Dockerfile"
+		remoteBuilderAddr string
 	)
 
 	form := huh.NewForm(
@@ -77,6 +98,13 @@ func AskInputs() PromptResults {
 				Placeholder("Dockerfile").
 				Value(&dockerfilePath).
 				Validate(validateRequired("Dockerfile path")),
+
+			// optional input
+			huh.NewInput().
+				Title("Enter the remote builder address where buildkitd is running (optional)").
+				Value(&remoteBuilderAddr).
+				Placeholder("tcp://1.2.3.4:1234 or ssh://user@host").
+				Validate(validateProtocol("remote builder address", []string{"ssh://", "tcp://"}, true)),
 		),
 	)
 
@@ -86,10 +114,11 @@ func AskInputs() PromptResults {
 	}
 
 	return PromptResults{
-		Repo:           repo,
-		RegistryURL:    registry,
-		Region:         region,
-		Arch:           arch,
-		DockerfilePath: dockerfilePath,
+		Repo:                 repo,
+		RegistryURL:          registry,
+		Region:               region,
+		Arch:                 arch,
+		DockerfilePath:       dockerfilePath,
+		RemoteBuilderAddress: remoteBuilderAddr,
 	}
 }

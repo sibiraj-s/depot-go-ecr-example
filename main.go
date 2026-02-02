@@ -16,6 +16,8 @@ import (
 	cliv1 "github.com/depot/depot-go/proto/depot/cli/v1"
 	"github.com/fatih/color"
 	"github.com/moby/buildkit/client"
+	"github.com/moby/buildkit/client/connhelper"
+	_ "github.com/moby/buildkit/client/connhelper/ssh" // Register SSH connection helper
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/progress/progressui"
 	"github.com/sibiraj-s/depot-go-ecr-example/aws"
@@ -58,10 +60,6 @@ var RAILPACK_VERSION = "v0.17.1"
 var railpackFrontend = fmt.Sprintf("ghcr.io/railwayapp/railpack-frontend:%s", RAILPACK_VERSION)
 
 func main() {
-	// load depot variables from env
-	depotToken := os.Getenv("DEPOT_TOKEN")
-	depotProjectId := os.Getenv("DEPOT_PROJECT_ID")
-
 	// get the repo to clone by prompting the user
 	inputs := AskInputs()
 
@@ -145,7 +143,54 @@ func main() {
 		Builder:        builder,
 	}
 
-	// 3. Register a new build.
+	buildkitClient, cleanup, err := getBuildkitClient(ctx, inputs, opts)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// Use the buildkit client to build the image.
+	buildErr := buildImage(ctx, buildkitClient, opts)
+	cleanup(buildErr)
+	if buildErr != nil {
+		log.Fatal(buildErr)
+	}
+}
+
+func getBuildkitClient(ctx context.Context, inputs PromptResults, opts BuildOptions) (*client.Client, func(error), error) {
+	if inputs.RemoteBuilderAddress != "" {
+		fmt.Printf("Connecting to custom builder at %s...\n", inputs.RemoteBuilderAddress)
+
+		var buildkitClient *client.Client
+		var err error
+
+		// Check if the address requires a connection helper (e.g., ssh://)
+		helper, err := connhelper.GetConnectionHelper(inputs.RemoteBuilderAddress)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to get connection helper: %w", err)
+		}
+
+		if helper != nil {
+			// Use connection helper for SSH or other special protocols
+			buildkitClient, err = client.New(ctx, "", client.WithContextDialer(helper.ContextDialer))
+		} else {
+			// Regular TCP or Unix socket connection
+			buildkitClient, err = client.New(ctx, inputs.RemoteBuilderAddress)
+		}
+
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to connect to remote builder: %w", err)
+		}
+		cleanup := func(_ error) {
+			buildkitClient.Close()
+		}
+		return buildkitClient, cleanup, nil
+	}
+
+	// load depot variables from env
+	depotToken := os.Getenv("DEPOT_TOKEN")
+	depotProjectId := os.Getenv("DEPOT_PROJECT_ID")
+
+	// Register a new build with Depot.
 	req := &cliv1.CreateBuildRequest{
 		ProjectId: depotProjectId,
 		Options: []*cliv1.BuildOptions{
@@ -155,41 +200,38 @@ func main() {
 			},
 		},
 	}
-	build, err := build.NewBuild(ctx, req, depotToken)
+	depotBuild, err := build.NewBuild(ctx, req, depotToken)
 	if err != nil {
-		log.Fatal(err)
+		return nil, nil, fmt.Errorf("failed to create depot build: %w", err)
 	}
 
 	fmt.Println("Waiting for a depot machine to pickup the build...")
 
-	// Set the buildErr to any error that represents the build failing.
-	var buildErr error
-	defer build.Finish(buildErr)
-
-	// 4. Acquire a buildkit machine.
-	var buildkit *machine.Machine
-	buildkit, buildErr = machine.Acquire(ctx, build.ID, build.Token, inputs.Arch)
-	if buildErr != nil {
-		return
+	// Acquire a buildkit machine.
+	buildkit, err := machine.Acquire(ctx, depotBuild.ID, depotBuild.Token, inputs.Arch)
+	if err != nil {
+		depotBuild.Finish(err)
+		return nil, nil, fmt.Errorf("failed to acquire buildkit machine: %w", err)
 	}
-	defer buildkit.Release()
 
-	// 5. Check buildkitd readiness. When the buildkitd starts, it may take
+	// Check buildkitd readiness. When the buildkitd starts, it may take
 	// quite a while to be ready to accept connections when it loads a large boltdb.
 	connectCtx, cancelConnect := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancelConnect()
 
-	var buildkitClient *client.Client
-	buildkitClient, buildErr = buildkit.Connect(connectCtx)
-	if buildErr != nil {
-		return
+	buildkitClient, err := buildkit.Connect(connectCtx)
+	if err != nil {
+		buildkit.Release()
+		depotBuild.Finish(err)
+		return nil, nil, fmt.Errorf("failed to connect to buildkit: %w", err)
 	}
 
-	// 6. Use the buildkit client to build the image.
-	buildErr = buildImage(ctx, buildkitClient, opts)
-	if buildErr != nil {
-		return
+	cleanup := func(buildErr error) {
+		buildkit.Release()
+		depotBuild.Finish(buildErr)
 	}
+
+	return buildkitClient, cleanup, nil
 }
 
 func buildImage(ctx context.Context, buildkitClient *client.Client, opts BuildOptions) error {

@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"time"
 
 	"github.com/depot/depot-go/build"
@@ -20,6 +22,13 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+type Builder string
+
+const (
+	BUILDER_DOCKER   Builder = "docker"
+	BUILDER_RAILPACK Builder = "railpack"
+)
+
 type BuildOptions struct {
 	Registry       *aws.ECRRegistry
 	Region         string
@@ -27,6 +36,7 @@ type BuildOptions struct {
 	DockerfilePath string
 	Arch           string
 	RepoDirPath    string
+	Builder        Builder
 }
 
 type Annotations struct {
@@ -43,6 +53,9 @@ type Descriptor struct {
 func newLine() {
 	fmt.Println("")
 }
+
+var RAILPACK_VERSION = "v0.17.1"
+var railpackFrontend = fmt.Sprintf("ghcr.io/railwayapp/railpack-frontend:%s", RAILPACK_VERSION)
 
 func main() {
 	// load depot variables from env
@@ -74,10 +87,48 @@ func main() {
 	fmt.Println("Repository successfully cloned to: ", cloneDir)
 	newLine()
 
+	builder := BUILDER_DOCKER
+
 	// 2. Check if dockerfile exists
 	if !FileExists(JoinPath(cloneDir, inputs.DockerfilePath)) {
-		fmt.Println("Dockerfile not found in", cloneDir)
-		return
+		// if dockerfile does not exist, use railpack frontend
+		fmt.Printf("Dockerfile not found in %s. Falling back to Railpack %s...\n", cloneDir, RAILPACK_VERSION)
+		builder = BUILDER_RAILPACK
+	}
+
+	// prepare railpack
+	if builder == BUILDER_RAILPACK {
+		// check if railpack is installed
+		if _, err := exec.LookPath("railpack"); err != nil {
+			log.Fatalf("railpack is not installed: %v", err)
+		}
+
+		fmt.Println("Preparing Railpack plan...")
+		railpackPlanJsonPath := filepath.Join(cloneDir, "railpack-plan.json")
+		railpackInfoJsonPath := filepath.Join(cloneDir, "railpack-info.json")
+
+		args := []string{
+			"prepare",
+			cloneDir,
+			"--plan-out", railpackPlanJsonPath,
+			"--info-out", railpackInfoJsonPath,
+		}
+
+		// execute the railpack prepare command
+		railpackCmd := exec.Command("railpack", args...)
+		railpackCmd.Stdout = os.Stdout
+		railpackCmd.Stderr = os.Stderr
+		err = railpackCmd.Run()
+		if err != nil {
+			log.Fatalf("failed to prepare Railpack plan: %v", err)
+		}
+
+		if _, err = os.Stat(railpackPlanJsonPath); err != nil {
+			if os.IsNotExist(err) {
+				log.Fatalf("railpack-plan.json was not created: %v", err)
+			}
+			log.Fatalf("failed to check for railpack-plan.json: %v", err)
+		}
 	}
 
 	// You can use a context with timeout to cancel the build if you would like.
@@ -91,6 +142,7 @@ func main() {
 		Region:         inputs.Region,
 		Tag:            aws.ImageTag(registry, workflowId),
 		Arch:           inputs.Arch,
+		Builder:        builder,
 	}
 
 	// 3. Register a new build.
@@ -159,12 +211,15 @@ func buildImage(ctx context.Context, buildkitClient *client.Client, opts BuildOp
 	ecrCreds := aws.GetEcrCreds(ctx, opts.Region, opts.Registry)
 
 	eg.Go(func() error {
-		opts := client.SolveOpt{
-			Frontend: "dockerfile.v0",
-			FrontendAttrs: map[string]string{
-				"filename": opts.DockerfilePath,
-				"platform": fmt.Sprintf("linux/%s", opts.Arch),
-			},
+		frontendAttrs := map[string]string{
+			"filename": opts.DockerfilePath,
+			"platform": fmt.Sprintf("linux/%s", opts.Arch),
+			// "source":   "docker/dockerfile", // default source
+		}
+
+		solveOpts := client.SolveOpt{
+			Frontend:      "dockerfile.v0",
+			FrontendAttrs: frontendAttrs,
 			LocalDirs: map[string]string{
 				"dockerfile": opts.RepoDirPath,
 				"context":    opts.RepoDirPath,
@@ -174,7 +229,16 @@ func buildImage(ctx context.Context, buildkitClient *client.Client, opts BuildOp
 			Internal: true, // Prevent recording the build steps and traces in buildkit as it is _very_ slow.
 		}
 
-		res, err = buildkitClient.Solve(ctx, nil, opts, ch)
+		// override default gateway to use custom frontend
+		// Ref: https://docs.docker.com/build/buildkit/frontend/#dockerfile-frontend
+		// https://github.com/docker/buildx/blob/abf6ab4a377ff196714ba06d8e62407ef1750549/build/opt.go#L132-L137
+		if opts.Builder == BUILDER_RAILPACK {
+			solveOpts.Frontend = "gateway.v0"
+			solveOpts.FrontendAttrs["source"] = railpackFrontend
+			solveOpts.FrontendAttrs["cmdline"] = railpackFrontend
+		}
+
+		res, err = buildkitClient.Solve(ctx, nil, solveOpts, ch)
 		return err
 	})
 

@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"os"
 
 	"github.com/go-git/go-git/v5"
@@ -16,8 +16,7 @@ func CloneRepo(repo string, workflowId string) string {
 	})
 
 	if err != nil {
-		fmt.Printf("Clone failed %v\n", err)
-		return ""
+		log.Fatalf("Clone failed %v\n", err)
 	}
 
 	return cloneDir

@@ -169,17 +169,18 @@ func getBuildkitClient(ctx context.Context, inputs PromptResults, opts BuildOpti
 			return nil, nil, fmt.Errorf("failed to get connection helper: %w", err)
 		}
 
+		var dialer client.ClientOpt
+		address := inputs.RemoteBuilderAddress
 		if helper != nil {
-			// Use connection helper for SSH or other special protocols
-			buildkitClient, err = client.New(ctx, "", client.WithContextDialer(helper.ContextDialer))
-		} else {
-			// Regular TCP or Unix socket connection
-			buildkitClient, err = client.New(ctx, inputs.RemoteBuilderAddress)
+			address = ""
+			dialer = client.WithContextDialer(helper.ContextDialer)
 		}
 
+		buildkitClient, err = client.New(ctx, address, dialer)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to connect to remote builder: %w", err)
 		}
+
 		cleanup := func(_ error) {
 			buildkitClient.Close()
 		}

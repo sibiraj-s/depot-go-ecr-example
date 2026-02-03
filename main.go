@@ -169,9 +169,6 @@ func getBuildkitClient(ctx context.Context, inputs PromptResults, opts BuildOpti
 	if remoteBuilderAddress != "" {
 		fmt.Printf("Connecting to custom builder at %s...\n", remoteBuilderAddress)
 
-		var buildkitClient *client.Client
-		var err error
-
 		// Check if the address requires a connection helper (e.g., ssh://)
 		helper, err := connhelper.GetConnectionHelper(remoteBuilderAddress)
 		if err != nil {
@@ -186,7 +183,7 @@ func getBuildkitClient(ctx context.Context, inputs PromptResults, opts BuildOpti
 			dialer = client.WithContextDialer(helper.ContextDialer)
 		}
 
-		buildkitClient, err = client.New(ctx, address, dialer)
+		buildkitClient, err := client.New(ctx, address, dialer)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to connect to remote builder: %w", err)
 		}

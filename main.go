@@ -157,21 +157,31 @@ func main() {
 }
 
 func getBuildkitClient(ctx context.Context, inputs PromptResults, opts BuildOptions) (*client.Client, func(error), error) {
-	if inputs.RemoteBuilderAddress != "" {
-		fmt.Printf("Connecting to custom builder at %s...\n", inputs.RemoteBuilderAddress)
+	remoteBuilderAddress := inputs.RemoteBuilderAddress
+	// load depot variables from env
+	depotToken := os.Getenv("DEPOT_TOKEN")
+	depotProjectId := os.Getenv("DEPOT_PROJECT_ID")
+
+	if remoteBuilderAddress == "" && depotToken == "" && depotProjectId == "" {
+		return nil, nil, fmt.Errorf("remote builder address or DEPOT_TOKEN and DEPOT_PROJECT_ID environment variables are required")
+	}
+
+	if remoteBuilderAddress != "" {
+		fmt.Printf("Connecting to custom builder at %s...\n", remoteBuilderAddress)
 
 		var buildkitClient *client.Client
 		var err error
 
 		// Check if the address requires a connection helper (e.g., ssh://)
-		helper, err := connhelper.GetConnectionHelper(inputs.RemoteBuilderAddress)
+		helper, err := connhelper.GetConnectionHelper(remoteBuilderAddress)
 		if err != nil {
 			return nil, nil, fmt.Errorf("failed to get connection helper: %w", err)
 		}
 
 		var dialer client.ClientOpt
-		address := inputs.RemoteBuilderAddress
+		address := remoteBuilderAddress
 		if helper != nil {
+			// if the connection helper is not nil, use it to connect to the remote builder
 			address = ""
 			dialer = client.WithContextDialer(helper.ContextDialer)
 		}
@@ -186,10 +196,6 @@ func getBuildkitClient(ctx context.Context, inputs PromptResults, opts BuildOpti
 		}
 		return buildkitClient, cleanup, nil
 	}
-
-	// load depot variables from env
-	depotToken := os.Getenv("DEPOT_TOKEN")
-	depotProjectId := os.Getenv("DEPOT_PROJECT_ID")
 
 	// Register a new build with Depot.
 	req := &cliv1.CreateBuildRequest{

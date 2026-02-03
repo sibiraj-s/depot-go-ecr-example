@@ -1,6 +1,6 @@
 # Depot Go ECR Example
 
-This is an example for cloning a repository, building a Docker image using [Depot] and pushing it to Amazon ECR using [depot-go](https://github.com/depot/depot-go) SDK.
+This is an demo setup for cloning a repository, building a Docker image using [Depot] and pushing it to Amazon ECR using [depot-go](https://github.com/depot/depot-go) SDK. Also you can use a remote buildkitd machine as a builder by providing the remote builder address instead of depot too.
 
 ## Prerequisites
 

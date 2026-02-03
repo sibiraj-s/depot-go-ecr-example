@@ -1,10 +1,10 @@
-# EC2 BuildKit Setup Guide
+# Remote BuildKit Setup Guide
 
-This guide covers setting up an EC2 instance as a remote BuildKit builder for use with SSH connections.
+This guide covers setting up an remote machine as a remote BuildKit builder for use with SSH connections.
 
 ## Prerequisites
 
-- EC2 instance running Ubuntu (tested on Ubuntu 22.04/24.04)
+- Remote machine running Ubuntu (tested on Ubuntu 22.04/24.04)
 - SSH access with key-based authentication
 - Security group allowing SSH (port 22) from your IP
 
@@ -87,10 +87,10 @@ newgrp docker
 From your local machine, connect using:
 
 ```
-ssh://ubuntu@<EC2_PUBLIC_IP>
-```
+ssh://ubuntu@<REMOTE_MACHINE_IP>
+``` 
 
-Example: `ssh://ubuntu@44.200.78.38`
+Example: `ssh://ubuntu@192.168.1.100`
 
 ## Troubleshooting
 
@@ -117,15 +117,8 @@ sudo systemctl status buildkit
 ### SSH connection fails
 
 - Verify your SSH key is loaded: `ssh-add -l`
-- Test SSH manually: `ssh ubuntu@<EC2_IP>`
-- Check EC2 security group allows port 22
-
-## Security Considerations
-
-1. **Restrict SSH access** - Only allow your IP in the security group
-2. **Use private subnets** - If possible, keep the builder in a private subnet
-3. **Rotate SSH keys** - Periodically rotate your SSH keys
-4. **Monitor access** - Enable CloudWatch logs or VPC flow logs
+- Test SSH manually: `ssh ubuntu@<REMOTE_MACHINE_IP>`
+- Check Remote machine security group allows port 22
 
 ## Optional: Persist Builds Across Restarts
 
@@ -135,7 +128,7 @@ By default, BuildKit stores build cache in `/var/lib/buildkit`. To preserve cach
 # Ensure the directory persists
 sudo mkdir -p /var/lib/buildkit
 
-# If using EBS, mount a volume to /var/lib/buildkit
+# If using a remote machine, mount a volume to /var/lib/buildkit
 ```
 
 ## Quick Reference

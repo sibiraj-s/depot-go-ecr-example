@@ -11,7 +11,7 @@ require (
 	github.com/depot/depot-go v0.5.2
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/fatih/color v1.18.0
-	github.com/go-git/go-git/v5 v5.16.4
+	github.com/go-git/go-git/v5 v5.16.5
 	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/moby/buildkit v0.27.1
 	golang.org/x/sync v0.19.0

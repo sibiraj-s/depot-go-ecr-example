@@ -15,7 +15,7 @@ require (
 	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/moby/buildkit v0.27.1
 	golang.org/x/sync v0.19.0
-	google.golang.org/grpc v1.78.0
+	google.golang.org/grpc v1.79.3
 )
 
 require (

@@ -21,6 +21,7 @@ import (
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/util/progress/progressui"
 	"github.com/sibiraj-s/depot-go-ecr-example/aws"
+	"github.com/tonistiigi/fsutil"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -256,6 +257,11 @@ func buildImage(ctx context.Context, buildkitClient *client.Client, opts BuildOp
 
 	ecrCreds := aws.GetEcrCreds(ctx, opts.Region, opts.Registry)
 
+	repoFS, err := fsutil.NewFS(opts.RepoDirPath)
+	if err != nil {
+		return fmt.Errorf("failed to open build context: %w", err)
+	}
+
 	eg.Go(func() error {
 		frontendAttrs := map[string]string{
 			"filename": opts.DockerfilePath,
@@ -266,9 +272,9 @@ func buildImage(ctx context.Context, buildkitClient *client.Client, opts BuildOp
 		solveOpts := client.SolveOpt{
 			Frontend:      "dockerfile.v0",
 			FrontendAttrs: frontendAttrs,
-			LocalDirs: map[string]string{
-				"dockerfile": opts.RepoDirPath,
-				"context":    opts.RepoDirPath,
+			LocalMounts: map[string]fsutil.FS{
+				"dockerfile": repoFS,
+				"context":    repoFS,
 			},
 			Exports:  []client.ExportEntry{exportEntry},
 			Session:  []session.Attachable{NewBuildkitAuthProvider(ecrCreds, opts.Registry)},

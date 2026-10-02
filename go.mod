@@ -1,6 +1,6 @@
 module github.com/sibiraj-s/depot-go-ecr-example
 
-go 1.26.8
+go 1.27.1
 
 require (
 	github.com/aws/aws-sdk-go-v2 v1.47.1
@@ -9,11 +9,11 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/ecrpublic v1.47.1
 	github.com/charmbracelet/huh v1.0.0
 	github.com/depot/depot-go v0.5.3
-	github.com/docker/docker v28.5.2+incompatible
 	github.com/fatih/color v1.19.0
 	github.com/go-git/go-git/v5 v5.19.2
 	github.com/matoous/go-nanoid/v2 v2.1.0
 	github.com/moby/buildkit v0.33.1
+	github.com/moby/moby/api v1.56.1
 	github.com/tonistiigi/fsutil v0.0.0-20260819142231-83cac42c1c52
 	golang.org/x/sync v0.23.0
 	google.golang.org/grpc v1.84.0

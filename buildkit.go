@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 
-	"github.com/docker/docker/api/types/registry"
 	"github.com/moby/buildkit/session"
 	"github.com/moby/buildkit/session/auth"
+	"github.com/moby/moby/api/types/registry"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
